@@ -119,8 +119,8 @@ class AutograsperBase(ABC):
                 except Exception as e:
                     print(f"Unexpected error during perform_task: {e}")
                     self.failed = True
-                    self.shutdown_event.set()
                     raise Exception(e)
+                    self.shutdown_event.set()
                 if self.shutdown_event.is_set() or self.state == RobotActivity.FINISHED:
                     break
                 self.state = RobotActivity.RESETTING
