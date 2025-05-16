@@ -6,11 +6,11 @@ camera:
   d: [-0.07727407195057368, -0.047989733519315944, 0.12157420705123315, -0.09667542135039282]
   record: true
   fps: 2.5
-  record_only_after_action: False
+  record_only_after_action: false
   save_images_individually: true
 
 experiment:
   name: "backgammon"
-  robot_idx: "robot24"
+  robot_idx: "robot21"
   timeout_between_experiments: 2.0
   time_between_orders: 2.5
