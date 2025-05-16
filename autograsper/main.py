@@ -9,7 +9,7 @@ import os
 from flask import Flask, Response
 
 from coordinator import DataCollectionCoordinator
-from custom_graspers.backgammon_grasper import BackgammonGrasper
+from custom_graspers.my_custom_grasper import MyCustomGrasper
 from utils import load_config
 
 
@@ -59,12 +59,12 @@ def generate_frames():
 def main():
     global global_coordinator
 
-    config_path = os.path.join(os.getcwd(), "autograsper", "backgammon-config.yaml")
-    config_path = os.path.join(os.getcwd(), "backgammon-config.yaml")
+    config_path = os.path.join(os.getcwd(), "autograsper", "my_config.yaml")
     config = load_config(config_path)
     shutdown_event = threading.Event()
 
-    grasper = BackgammonGrasper(config, shutdown_event=shutdown_event)
+    grasper = MyCustomGrasper(config, shutdown_event=shutdown_event)
+
     global_coordinator = DataCollectionCoordinator(config, grasper, shutdown_event)
     global_coordinator.start()
 

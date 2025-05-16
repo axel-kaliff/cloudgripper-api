@@ -1,225 +1,200 @@
-# CloudGripper API
+# Project Autograsper: Custom Grasper Development Guide
 
-Welcome to the CloudGripper API! This project provides a Python interface to remotely interact with the CloudGripper robot.
+## 1. Introduction
 
-## Table of Contents
+The Autograsper project is a robot action execution and data recording framework for the CloudGripper robot.
 
-1. [Introduction](#introduction)
-3. [Installation](#installation)
-4. [Usage](#usage)
-5. [Methods](#methods)
-6. [Color Picker](#color-picker)
-7. [Utilities](#utilities)
-8. [Example Projects](#example-projects)
-   - [Autograsper](#example-project-autograsper)
-   - [Recorder](#example-project-recorder)
-   - [Large Scale Data Collection](#example-project-large-scale-data-collection)
+## 2. Prerequisites
 
-## Introduction
-
-The CloudGripper API is designed to facilitate communication with the CloudGripper robot. The client includes functions to control the robot's movements, operate its gripper, retrieve images from its cameras, perform color calibration, and manage orders for the robot.
-
-## Installation
-
-To install the CloudGripper API Client, follow these steps:
+Install required pip packages in a venv:
 
 ```bash
-# Clone the repository
-git clone https://github.com/yourusername/cloudgripper-client.git
-cd cloudgripper-client
-
-# Install the required dependencies
+python3 -m venv venv
+source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-## Usage
+## 3. Core Concepts
 
-Here's an example of how to use the CloudGripper API Client to control a robot:
+### 3.1. `AutograsperBase`
+A custom grasper inherits from `grasper.AutograsperBase`.
 
+* **`__init__(self, config, shutdown_event)`**: Call `super().__init__`. Initializes `GripperRobot`, state flags, threading events, and reads common parameters from `config`.
+* **State Machine (`run_grasping`)**: Cycles through `RobotActivity` states (STARTUP, ACTIVE, RESETTING). This loop is managed by the `DataCollectionCoordinator`.
+* **Key Overridable Methods**:
+    * `startup(self)`: Pre-task setup.
+    * `perform_task(self)`: Main task logic.
+    * `reset_task(self)`: Post-success reset.
+    * `recover_after_fail(self)`: Post-failure recovery.
+* **Robot Interaction**:
+    * `queue_orders(self, order_list, ...)`: Executes a list of `(OrderType, params)` commands.
+    * `record_current_state(self)`: Signals coordinator to save current state (image, telemetry).
+* **Data from Coordinator**:
+    * `self.bottom_image`: Latest camera image.
+    * `self.robot_state`: Latest robot telemetry.
+    * `self.output_dir`: Directory for recorded data.
+* **Shutdown**: Monitor `self.shutdown_event.is_set()` in long operations. Use `sleep_with_shutdown()`.
+
+## 4. Steps to Create a Custom Autograsper
+
+### Step 1: Create Grasper File
+1.  New Python file (e.g., `autograsper/custom_graspers/my_grasper.py`).
+2.  Imports:
 ```python
-from client.cloudgripper_client import GripperRobot
-
-# Initialize the robot client
-robot = GripperRobot(name='robot1', token='your_api_token_here')
-
-# Get the robot's current state
-state, timestamp = robot.get_state()
-print(f"State: {state}, Timestamp: {timestamp}")
-
-# Move the robot
-robot.step_forward()
-robot.step_backward()
-robot.step_left()
-robot.step_right()
-
-# Operate the gripper
-robot.gripper_open()
-robot.gripper_close()
-
-# Retrieve images
-base_image, base_timestamp, _ = robot.get_image_base()
-top_image, top_timestamp = robot.get_image_top()
+import time, numpy as np, math, os, threading
+from grasper import AutograsperBase, RobotActivity
+from library.utils import OrderType, sleep_with_shutdown
+from library.rgb_object_tracker import get_object_pos
 ```
 
-## Methods
-
-### Initialization
-
+### Step 2: Define Custom Grasper Class
 ```python
-robot = GripperRobot(name='robot1', token='your_api_token_here')
+class MyCustomGrasper(AutograsperBase):
+    def __init__(self, config, shutdown_event: threading.Event):
+        super().__init__(config, shutdown_event=shutdown_event)
+        # Custom initializations, access config via self.config
+        self.target_color = self.config.get("my_grasper_params", {}).get("target_color", "green")
+        print(f"MyCustomGrasper initialized for {self.target_color} objects.")
 ```
 
-### Basic Movements
+### Step 3: Implement Core Logic Methods
+Override `startup`, `perform_task`, `reset_task`, `recover_after_fail` as needed.
 
-- `step_forward()`: Move the robot one step forward.
-- `step_backward()`: Move the robot one step backward.
-- `step_left()`: Move the robot one step to the left.
-- `step_right()`: Move the robot one step to the right.
+##### **`startup(self)`**:
+Initial robot setup (e.g., move to home).
+  ```python
+  def startup(self):
+      print("MyCustomGrasper: Startup.")
+      # Example: Move to home defined in config
+      home_xy = self.config.get("experiment", {}).get("robot_home_xy", [0.5, 0.5])
+      initial_z = self.config.get("experiment", {}).get("initial_z_height", 1.0)
+      orders = [
+          (OrderType.MOVE_Z, [initial_z]),
+          (OrderType.MOVE_XY, home_xy),
+          (OrderType.GRIPPER_OPEN, [])
+      ]
+      self.queue_orders(orders, record=False)
+  ```
 
-### Gripper Operations
 
-- `gripper_open()`: Open the robot's gripper.
-- `gripper_close()`: Close the robot's gripper.
-- `move_gripper(angle)`: Move the gripper to a specific angle.
+##### **`perform_task(self)`**: 
+Main task. Set `self.failed = True` on error.
+  ```python
+  def perform_task(self):
+      print(f"MyCustomGrasper: Performing task for {self.target_color}.")
+      if self.shutdown_event.is_set(): return
 
-### Rotations and Movements
+      try:
+          # Use self.bottom_image, self.robot_state
+          obj_pos = get_object_pos(self.bottom_image, self.robot_idx, self.target_color)
+          if obj_pos is None:
+              print(f"{self.target_color} object not found.")
+              self.failed = True
+              return
 
-- `rotate(angle)`: Rotate the robot to a specified angle.
-- `move_z(z)`: Move the robot along the Z-axis.
-- `move_xy(x, y)`: Move the robot along the X and Y axes.
+          # ... sequence of orders using self.queue_orders(...) ...
 
-### Image Retrieval
+          if not self._check_success(): # Implement your success check
+              self.failed = True
+      except Exception as e:
+          print(f"Error in perform_task: {e}")
+          self.failed = True
+  ```
+##### **`reset_task(self)`**: 
+Reset after success. Clear `self.failed = False`.
+##### **`recover_after_fail(self)`**:
+Attempt recovery. Often calls `reset_task()`.
 
-- `get_image_base()`: Get the base image from the robot's camera.
-- `get_image_top()`: Get the top image from the robot's camera.
-- `get_all_states()`: Get the combined state and images from the robot.
+### Step 5: Configuration (Example `config.yaml`)
+Your grasper accesses parameters via `self.config`. This dictionary is loaded from a YAML file.
+```yaml
+# Example config.yaml structure
+camera:
+  m: # Camera matrix
+    - [505.245, 0.0, 324.509]
+    - [0.0, 505.645, 233.541]
+    - [0.0, 0.0, 1.0]
+  d: [-0.077, -0.047, 0.121, -0.096] # Distortion coefficients
+  record: true
+  fps: 2.5
+  record_only_after_action: false
+  save_images_individually: true
+  # clip_length: 300 # Optional
 
-### State Retrieval
+experiment:
+  name: "my_custom_task"
+  robot_idx: "robot1"
+  timeout_between_experiments: 2.0
+  time_between_orders: 1.5 # Default time between orders for this grasper
+  # Grasper-specific settings can be nested
+  grasper_type: "MyCustomGrasper" # Used by main script to load correct grasper
+  robot_home_xy: [0.5, 0.5] # Example custom param
+  initial_z_height: 1.0 # Example custom param
 
-- `get_state()`: Get the current state of the robot.
-- `calibrate()`: Calibrate the robot.
-
-## Color-Picker
-
-The `rgb_color_picker.py` script provides functionality for color calibration and object tracking within images.
-
-### Usage
-
-You can use the script from the command line as follows:
-
-```bash
-python library/rgb_color_picker.py <image_file> <colors>
+my_grasper_params: # Custom section for your grasper
+  target_color: "blue"
+  grasp_approach_height: 0.05
 ```
+Access in code: `self.config.get('experiment', {}).get('time_between_orders', 2.0)`
 
-Example:
+### Step 7: Integration with `main.py`
+The `main.py` script handles loading and running a specific grasper based on the configuration.
+1.  Place your custom grasper file (e.g., `my_custom_grasper.py`) in a discoverable location, like the `custom_graspers/` directory.
+2.  Import your grasper in `main.py`:
+    ```python
+    # In main.py
+    # from custom_graspers.backgammon_grasper import BackgammonGrasper
+    # from custom_graspers.manual_grasper import ManualGrasper
+    from custom_graspers.my_custom_grasper import MyCustomGrasper # Add your grasper
+    ```
+3.  Modify the grasper instantiation logic in `main.py`'s `main()` function to select your grasper. You can use the `grasper_type` from your `config.yaml`:
+    ```python
+    # In main.py's main() function:
+    config = load_config(config_path)
+    shutdown_event = threading.Event()
+    active_grasper: AutograsperBase # For type hinting
 
-```bash
-python library/rgb_color_picker.py sample_image.jpg red green orange
-```
+    grasper_type_from_config = config.get("experiment", {}).get("grasper_type", "RandomGrasper") # Default if not specified
 
-### Functions
+    if grasper_type_from_config == "MyCustomGrasper":
+        active_grasper = MyCustomGrasper(config, shutdown_event=shutdown_event)
+    elif grasper_type_from_config == "ManualGrasper":
+        active_grasper = ManualGrasper(config, shutdown_event=shutdown_event)
+    # Add other elif blocks for other graspers
+    # elif grasper_type_from_config == "BackgammonGrasper":
+    #     active_grasper = BackgammonGrasper(config, shutdown_event=shutdown_event, task="pick-and-place") # Example with extra args
+    else: # Fallback or default
+        print(f"Warning: Grasper type '{grasper_type_from_config}' not explicitly handled or unknown. Falling back to RandomGrasper.")
+        from custom_graspers.random_grasping_task import RandomGrasper # Ensure this import exists
+        active_grasper = RandomGrasper(config, shutdown_event=shutdown_event)
 
-#### `test_calibration(image, colors)`
+    global_coordinator = DataCollectionCoordinator(config, active_grasper, shutdown_event)
+    # ... rest of main()
+    ```
+4.  Ensure your `config.yaml` (e.g., `autograsper/backgammon-config.yaml` as referenced in `main.py`) has `grasper_type: "MyCustomGrasper"` under the `experiment` section.
 
-Tests the calibration of specified colors in the given image.
+## Running the System & Testing
 
-#### `all_objects_are_visible(objects, image, DEBUG=False)`
+1.  **Configure**:
+    * Ensure your `.env` file has `CLOUDGRIPPER_TOKEN`.
+    * Modify your chosen `config.yaml` (e.g., `autograsper/backgammon-config.yaml`) to:
+        * Set `experiment.grasper_type` to your custom grasper's class name (e.g., `"MyCustomGrasper"`).
+        * Adjust other parameters like `robot_idx`, recording settings, and any custom parameters your grasper needs.
+2.  **Run `main.py`**:
+    Execute the main script from the project's root directory:
+    ```bash
+    python main.py
+    ```
+    This will:
+    * Load the configuration.
+    * Instantiate your selected autograsper.
+    * Start the `DataCollectionCoordinator`.
+    * Start a Flask web server (default: `http://0.0.0.0:3000`).
+3.  **Monitor & Test**:
+    * Open `http://localhost:3000/video_feed` in a web browser to see the live camera feed (if configured and working).
+    * Observe the console output for logs from your grasper and the coordinator.
+    * Check the `recorded_data/` directory (or as configured) for saved images, videos, and state JSON files.
+    * Thoroughly test task execution, error handling, and recovery.
+4.  **Shutdown**:
+    * Press `Ctrl+C` in the terminal where `main.py` is running to shut down the application. The `shutdown_event` will be set, allowing threads to terminate gracefully.
 
-Checks if all specified objects are visible in the image.
-
-#### `object_tracking(image, color="red", size_threshold=290, DEBUG=False, debug_image_path="debug_image.png")`
-
-Tracks objects of a specified color in the image and returns their positions.
-
-### Example
-
-```python
-import cv2
-from library.rgb_color_picker import object_tracking
-
-# Load the image
-image = cv2.imread("sample_image.jpg")
-
-# Track red objects
-position = object_tracking(image, color="red", DEBUG=True, debug_image_path="debug_red.png")
-print("Position of red object:", position)
-```
-
-## Utilities
-
-The `utils.py` script provides a set of utility functions for managing robot orders, executing complex sequences, and handling image data.
-
-### Functions
-
-#### `write_order(output_dir: str, start_time: float, previous_order: Optional[Tuple[Any, List[float]]] = None)`
-
-Save the previous order to the `orders.json` file.
-
-#### `execute_order(robot: GripperRobot, order: Tuple[OrderType, List[float]], output_dir: str, reverse_xy: bool = False)`
-
-Execute a single order on the robot and save its state.
-
-#### `queue_orders(robot: GripperRobot, order_list: List[Tuple[OrderType, List[float]]], time_between_orders: float, output_dir: str = "", reverse_xy: bool = False)`
-
-Queue a list of orders for the robot to execute sequentially and save state after each order.
-
-#### `queue_orders_with_input(robot: GripperRobot, order_list: List[Tuple[OrderType, List[float]]], output_dir: str = "", start_time: float = -1.0)`
-
-Queue a list of orders for the robot to execute sequentially, waiting for user input between each command, and save state after each order.
-
-#### `snowflake_sweep(robot: GripperRobot)`
-
-Perform a snowflake sweep pattern with the robot.
-
-#### `sweep_straight(robot: GripperRobot)`
-
-Perform a straight sweep pattern with the robot.
-
-#### `recover_gripper(robot: GripperRobot)`
-
-Recover the gripper by fully opening and then closing it.
-
-#### `generate_position_grid() -> np.ndarray`
-
-Generate a grid of positions.
-
-#### `pick_random_positions(position_bank: np.ndarray, n_layers: int, object_size: float, avoid_positions: Optional[List[np.ndarray]] = None) -> List[np.ndarray]`
-
-Pick random positions from the position bank ensuring they are spaced apart by object_size.
-
-#### `get_undistorted_bottom_image(robot: GripperRobot, m: np.ndarray, d: np.ndarray) -> np.ndarray`
-
-Get an undistorted image from the robot's camera.
-
-#### `convert_ndarray_to_list(obj: Any) -> Any`
-
-Convert a numpy ndarray to a Python list.
-
-### Example
-
-```python
-from client.cloudgripper_client import GripperRobot
-from library.utils import generate_position_grid, pick_random_positions
-
-# Initialize the robot client
-robot = GripperRobot(name='robot1', token='your_api_token_here')
-
-# Generate a grid of positions
-position_grid = generate_position_grid()
-
-# Pick random positions ensuring minimum distance
-positions = pick_random_positions(position_grid, n_layers=5, object_size=0.1)
-print("Selected positions:", positions)
-```
-
-## Example-projects
-
-### Example Project: Autograsper
-
-See `autograsper/README.md` for more details
-
-
-
----
-
-For more detailed documentation and examples, please refer to the source code and docstrings provided in each method. If you encounter any issues or have questions, feel free to open an issue on GitHub.

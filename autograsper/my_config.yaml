@@ -1,0 +1,26 @@
+# Example config.yaml structure
+camera:
+  m: # Camera matrix
+    - [505.245, 0.0, 324.509]
+    - [0.0, 505.645, 233.541]
+    - [0.0, 0.0, 1.0]
+  d: [-0.077, -0.047, 0.121, -0.096] # Distortion coefficients
+  record: true
+  fps: 2.5
+  record_only_after_action: false
+  save_images_individually: true
+  # clip_length: 300 # Optional
+
+experiment:
+  name: "my_custom_task"
+  robot_idx: "robot23"
+  timeout_between_experiments: 2.0
+  time_between_orders: 1.5 # Default time between orders for this grasper
+  # Grasper-specific settings can be nested
+  grasper_type: "MyCustomGrasper" # Used by main script to load correct grasper
+  robot_home_xy: [0.5, 0.5] # Example custom param
+  initial_z_height: 1.0 # Example custom param
+
+my_grasper_params: # Custom section for your grasper
+  target_color: "blue"
+  grasp_approach_height: 0.05
