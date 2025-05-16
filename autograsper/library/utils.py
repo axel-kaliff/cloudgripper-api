@@ -356,7 +356,6 @@ def manual_control(robot: GripperRobot, step_size=0.1):
     def on_press(key):
         nonlocal current_x, current_y, current_z, current_rotation, current_angle
         try:
-
             # == XY axis ==
             if key.char == "w":
                 current_y += step_size

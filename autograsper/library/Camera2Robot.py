@@ -145,6 +145,16 @@ robot_parameters = {
         "a4": 149,
         "b4": 475,
     },
+    "robot24": {
+        "a1": 623,
+        "b1": 56,
+        "a3": 185,
+        "b3": 58,
+        "a2": 614,
+        "b2": 488,
+        "a4": 173,
+        "b4": 486,
+    },
 }
 
 
@@ -202,8 +212,8 @@ def cam_to_robot(robot_idx, camera_coordinates):
 
     # Transform a new pixel coordinate (example: (12, 36))
     robot_coord = transform_pixel_to_robot(H, camera_coordinates)
-    return robot_coord
     print(f"Robot coordinates (new calc): {robot_coord}")
+    return robot_coord
 
 
 def Camera2Robot(cam_pos, robot_idx):
