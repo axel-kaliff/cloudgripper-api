@@ -51,3 +51,4 @@ finetune.py
 real_eval.py
 uv.lock
 proposed_action.json
+.obsidian

@@ -13,7 +13,7 @@ camera:
 
 experiment:
   name: "my_custom_task"
-  robot_idx: "robot23"
+  robot_idx: "robot21"
   timeout_between_experiments: 2.0
   time_between_orders: 1.5 # Default time between orders for this grasper
   # Grasper-specific settings can be nested
@@ -22,5 +22,5 @@ experiment:
   initial_z_height: 1.0 # Example custom param
 
 my_grasper_params: # Custom section for your grasper
-  target_color: "blue"
+  target_color: "green"
   grasp_approach_height: 0.05

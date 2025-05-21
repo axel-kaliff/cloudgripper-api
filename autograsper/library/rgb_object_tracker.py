@@ -1,7 +1,7 @@
 import argparse
 import configparser
 import os
-
+import pathlib
 import cv2
 import numpy as np
 
@@ -12,7 +12,7 @@ class ColorNotFoundError(Exception):
     """Exception raised when a color is not found in the configuration."""
 
 
-def load_color_ranges(config_file="library/color_config.ini"):
+def load_color_ranges(config_file="color_config.ini"):
     """
     Load color ranges from a configuration file.
 
@@ -23,7 +23,7 @@ def load_color_ranges(config_file="library/color_config.ini"):
         dict: A dictionary with color ranges.
     """
     print(os.getcwd())
-    config_file = os.path.join(os.getcwd(), config_file)
+    config_file = os.path.join(pathlib.Path(__file__).parent.resolve(), config_file)
     f = open(config_file)
     config = configparser.ConfigParser()
     config.read(config_file)
